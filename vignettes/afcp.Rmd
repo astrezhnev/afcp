@@ -1,0 +1,36 @@
+---
+title: "AFCP: Average Feature Choice Probability "
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{afcp}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(cjoint)
+#library(afcp)
+```
+
+Testing with cjoint here
+
+```{r}
+data("immigrationconjoint")
+data("immigrationdesign")
+
+# Run AMCE estimator using all attributes in the design
+results <- amce(Chosen_Immigrant ~ Gender + Education + `Language Skills` +
+`Country of Origin` + Job + `Job Experience` + `Job Plans` +
+`Reason for Application` + `Prior Entry`, data=immigrationconjoint,
+cluster=TRUE, respondent.id="CaseID", design=immigrationdesign)
+
+# For each attribute in the model 
+
+```
