@@ -21,11 +21,27 @@ afcp <- function(cjointobj){
   # Store the SEs too
   afcp_SEs <- afcp_ests
 
+  # Get the baselines
+  baseline <- cjointobj$baselines
 
   # For each attribute, estimate each AFCP
   ##### RIGHT NOW ASSUMING UNIFORM RANDOMIZATION
 
   # For each attribute
+  for (attribute in names(attr_levels)){
+
+    base_level <- baseline[[attribute]]
+
+    # Estimate the FCPs relative to the baseline
+    for (level in attr_levels[[attribute]]){
+      if (base_level != level){
+        fcp.results <- fcp.est.all(data, attribute, level, base_level, cluster)
+      }
+
+    }
+
+
+  }
 
 
 
@@ -256,25 +272,14 @@ fcp.est.3 <- function(indata, amce_var, level_a, level_b, level_c){
 # cluster: Cluster variable (respondent ID)
 # level_a: First level of variable
 # level_b: Second level of variable
-fcp.est.all <- function(indata, amce_var, level_a, level_b){
+fcp.est.all <- function(indata, amce_var, level_a, level_b, cluster){
 
   # Make the data wide
   data_wide <- make.wide.data(indata, amce_var, level_a, level_b)
 
-  # Get the simple AMCE
-  indata[[amce_var]] <- relevel(indata[[amce_var]], level_b)
-  amce_reg <- lm_robust(as.formula(paste("response ~", amce_var, sep = " ")), data = indata, cluster = respid) # hardcode respid
-  amce_model <- tidy(amce_reg)
-
-  # Estimate and p-value
-  amce_est <- amce_model$estimate[grepl(level_a, amce_model$term)]
-  amce_se <- amce_model$std.error[grepl(level_a, amce_model$term)]
-  amce_statistic <- amce_model$statistic[grepl(level_a, amce_model$term)]
-  amce_pval <- amce_model$p.value[grepl(level_a, amce_model$term)]
-
   # Now do FCPs
   # Get estimates
-  estimates <- lm_robust(choose ~ treatment, data=data_wide, cluster=respid) # hardcoding respid cluster for now
+  estimates <- lm_robust(choose ~ treatment, data=data_wide, cluster=cluster) # hardcoding respid cluster for now
 
   # Variance-covariance matrix
   var_cov <- vcov(estimates)
