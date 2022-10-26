@@ -30,17 +30,17 @@ afcp <- function(cjointobj){
   # For each attribute
   for (attribute in names(attr_levels)){
 
-    base_level <- baseline[[attribute]]
-
     # Estimate the FCPs relative to the baseline
-    for (level in attr_levels[[attribute]]){
-      if (base_level != level){
-        fcp.results <- fcp.est.all(data, attribute, level, base_level, cluster)
+    for (level1 in attr_levels[[attribute]]){
+      for (level2 in attr_levels[[attribute]]){
+        if (level1 != level2){
+          fcp.results <- fcp.est.all(data, attribute, level1, level2, cluster)
+          afcp_ests[[attribute]][level1, level2] <- fcp.results$out_results$afcp_est
+
+        }
+
       }
-
     }
-
-
   }
 
 
@@ -77,8 +77,7 @@ afcp <- function(cjointobj){
   afcp_se = sqrt(c(var_cov[1,1]))
 
   # Generate results matrix
-  out_results <- data.frame(name = paste(level_a, level_b, sep = ", "), amce_est = amce_est, amce_se = amce_se,
-                            amce_zstat = amce_statistic, amce_pval = amce_pval, afcp = afcp_est, afcp_centered = afcp_est - .5, se = afcp_se)
+  out_results <- data.frame(name = paste(level_a, level_b, sep = ", "), afcp = afcp_est, afcp_centered = afcp_est - .5, se = afcp_se)
   out_results$afcp_zstat <- (out_results$afcp - .5)/out_results$se
   out_results$afcp_pval <- 2*pnorm(-abs(out_results$afcp_zstat))
 
@@ -339,6 +338,6 @@ fcp.est.all <- function(indata, amce_var, level_a, level_b, cluster){
     wald_p <- NA
   }
 
-  return(list(model_amce = amce_reg, model_afcp = estimates, summary = out_results, L_other = L_other, wald_stat = wald_stat, wald_p = wald_p, direct_indirect = direct_v_indirect, CMat = CMat))
+  return(list(model_afcp = estimates, summary = out_results, L_other = L_other, wald_stat = wald_stat, wald_p = wald_p, direct_indirect = direct_v_indirect, CMat = CMat))
 
 }
