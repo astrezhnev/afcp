@@ -1,139 +1,137 @@
 ## cjoint - load temp data
-
 library(cjoint)
+library(estimatr)
+
+# Immigration Choice Conjoint Experiment Data from Hainmueller et. al. (2014).
+data("immigrationconjoint")
+data("immigrationdesign")
+
+# Run AMCE estimator using all attributes in the design
+results <- amce(ChosenImmigrant ~  `Prior Entry`, data=immigrationconjoint,
+                cluster=TRUE, respondent.id="CaseID", design="uniform")
+# Print summary
+summary(results)
+
+afcp_est <- afcp(results, respondent.id="CaseID", task.id = "contestno", profile.id="profile", attribute = "PriorEntry")
 
 #' Estimates AFCPs from a cjoint object
 #'
-afcp <- function(cjointobj){
+afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, baseline = NULL){
 
+  # Sanity checks
+  
+  # Is cjointobj an amce object?
+  if (class(cjointobj) != "amce"){
+    stop("Error: 'cjointobj' not of class 'amce'")
+  }
+  
+  # Is attribute in cjointobj
+  if (!(attribute %in% names(cjointobj$attributes))){
+    stop("Error: 'attribute' not in list of attributes in 'cjointobj'")
+  }
+  
   # Get dataset
   data <- cjointobj$data
+  
+  # Get formula and outcome
+  choice.outcome = as.character(cjointobj$formula)[2]
 
-  # Get the list of attributes
-  attr_levels <- cjointobj$attributes
-
-  # For each attribute, generate a matrix of AFCPs
-  afcp_ests <- list()
-  for (attribute in names(attr_levels)){
-    afcp_ests[[attribute]] <- matrix(nrow=length(attr_levels[[attribute]]), ncol=length(attr_levels[[attribute]]), data=NA)
-    colnames(afcp_ests[[attribute]]) <- rownames(afcp_ests[[attribute]]) <- attr_levels[[attribute]]
+  # Get the list of levels
+  attr_levels <- cjointobj$attributes[[attribute]]
+  
+  # Get the baseline
+  # If null, choose existing baseline
+  if (is.null(baseline)){
+    baseline <- cjointobj$baselines[[attribute]]
   }
-  # Store the SEs too
-  afcp_SEs <- afcp_ests
-
-  # Get the baselines
-  baseline <- cjointobj$baselines
-
-  # For each attribute, estimate each AFCP
-  ##### RIGHT NOW ASSUMING UNIFORM RANDOMIZATION
-
-  # For each attribute
-  for (attribute in names(attr_levels)){
-
-    # Estimate the FCPs relative to the baseline
-    for (level1 in attr_levels[[attribute]]){
-      for (level2 in attr_levels[[attribute]]){
-        if (level1 != level2){
-          fcp.results <- fcp.est.all(data, attribute, level1, level2, cluster)
-          afcp_ests[[attribute]][level1, level2] <- fcp.results$out_results$afcp_est
-
-        }
-
+  
+  # Error check - is baseline in the list of levels
+  if (!(baseline %in% attr_levels)){
+    stop(paste("Error: 'baseline', ", baseline,  ", not in levels of 'attribute'", sep=""))
+  }
+  
+  # Drop baseline among usable levels
+  attr_use <- attr_levels[attr_levels != baseline]
+  
+  # For each non-baseline attribute, estimate the AFCP relative to the baseline.
+  afcp_list <- list()
+  for (level in attr_use){
+    # Make the data wide
+    wide_data <- make.wide.data(indata=data, amce_var = attribute, level_a = level, level_b = baseline, 
+                                respondentID = respondent.id, choice = choice.outcome, qid = task.id, option = profile.id)
+    print(level)
+    print(baseline)
+    print(wide_data)
+    # Get estimates
+    estimates <- lm_robust(choose ~ treatment, data=wide_data, cluster=respid) # respid = respondent ID from wide_data
+  
+    # Variance-covariance matrix
+    var_cov <- vcov(estimates)
+  
+    # Get AFCPs from model
+    afcp_est = c(estimates$coefficients[1])
+  
+    # Get standard errors
+    afcp_se = sqrt(c(var_cov[1,1]))
+  
+    # Generate results matrix
+    out_results <- data.frame(name = paste(level, baseline, sep = ", "), afcp = afcp_est, afcp_centered = afcp_est - .5, se = afcp_se)
+    out_results$afcp_zstat <- (out_results$afcp - .5)/out_results$se
+    out_results$afcp_pval <- 2*pnorm(-abs(out_results$afcp_zstat))
+  
+    rownames(out_results) <- NULL
+  
+    # Wald test for AFCP-transitivity
+    # AFCP(a,b) - 1/2 = AFCP(a,c) - AFCP(b,c)
+    # \beta_0 - \beta_1 + \beta_2 = 1/2
+  
+    # Number of *other* levels
+    L_other <- (length(estimates$coefficients) - 1)/2 #
+  
+    # If there's more than two levels
+    if (L_other > 0){
+      # Constraint Mat
+      CMat <- matrix(nrow=L_other, ncol=length(estimates$coefficients)) # L-2 constraints
+      for (k in 1:L_other){
+        CMat[k,] <- 0
+        CMat[k,1] <- 1
+        CMat[k,1 + k] <- -1
+        CMat[k,1 + L_other + k] <- 1 # This works because of how we've arranged the levels - First level_a - level_c then level_b - level_c (same order of the Cs)
       }
+      colnames(CMat) <- names(estimates$coefficients)
+      # Const equality
+      c <- rep(1/2, L_other)
+  
+      # Flag problematic divergences
+      direct_v_indirect = c(CMat%*%estimates$coefficients - c)
+      names(direct_v_indirect) =  gsub(paste0("treatment",level_a,", "), "", names(estimates$coefficients)[2:(L_other+1)])
+  
+      # Construct the wald test statistic
+      wald_stat <- t(CMat%*%estimates$coefficients - c)%*%solve((CMat)%*%var_cov%*%t((CMat)))%*%(CMat%*%estimates$coefficients - c)
+  
+      # Get a p-value
+      wald_p <- pchisq(wald_stat, L_other, lower.tail=F)
+    }else{
+      direct_v_indirect <- NA
+      wald_stat <- NA
+      wald_p <- NA
     }
+    
+    afcp_list[[level]] <- list(model_afcp = estimates, summary = out_results, L_other = L_other, wald_stat = wald_stat, wald_p = wald_p, direct_indirect = direct_v_indirect, CMat = CMat)
   }
-
-
-
+  
+  return(afcp_list)
 }
 
+afcp_est <- afcp(results, respondent.id="CaseID", task.id = "contestno", profile.id="profile", attribute = "PriorEntry")
 
-
-  # Make the data wide
-  data_wide <- make.wide.data(indata, amce_var, level_a, level_b)
-
-  # Get the simple AMCE
-  indata[[amce_var]] <- relevel(indata[[amce_var]], level_b)
-  amce_reg <- lm_robust(as.formula(paste("response ~", amce_var, sep = " ")), data = indata, cluster = respid) # hardcode respid
-  amce_model <- tidy(amce_reg)
-
-  # Estimate and p-value
-  amce_est <- amce_model$estimate[grepl(level_a, amce_model$term)]
-  amce_se <- amce_model$std.error[grepl(level_a, amce_model$term)]
-  amce_statistic <- amce_model$statistic[grepl(level_a, amce_model$term)]
-  amce_pval <- amce_model$p.value[grepl(level_a, amce_model$term)]
-
-  # Now do FCPs
-  # Get estimates
-  estimates <- lm_robust(choose ~ treatment, data=data_wide, cluster=respid) # hardcoding respid cluster for now
-
-  # Variance-covariance matrix
-  var_cov <- vcov(estimates)
-
-  # Get AFCPs from model
-  afcp_est = c(estimates$coefficients[1])
-
-  # Get standard errors
-  afcp_se = sqrt(c(var_cov[1,1]))
-
-  # Generate results matrix
-  out_results <- data.frame(name = paste(level_a, level_b, sep = ", "), afcp = afcp_est, afcp_centered = afcp_est - .5, se = afcp_se)
-  out_results$afcp_zstat <- (out_results$afcp - .5)/out_results$se
-  out_results$afcp_pval <- 2*pnorm(-abs(out_results$afcp_zstat))
-
-  rownames(out_results) <- NULL
-
-  # Wald test for AFCP-transitivity
-  # AFCP(a,b) - 1/2 = AFCP(a,c) - AFCP(b,c)
-  # \beta_0 - \beta_1 + \beta_2 = 1/2
-
-  # Number of *other* levels
-  L_other <- (length(estimates$coefficients) - 1)/2 #
-
-  # If there's more than two levels
-  if (L_other > 0){
-    # Constraint Mat
-    CMat <- matrix(nrow=L_other, ncol=length(estimates$coefficients)) # L-2 constraints
-    for (k in 1:L_other){
-      CMat[k,] <- 0
-      CMat[k,1] <- 1
-      CMat[k,1 + k] <- -1
-      CMat[k,1 + L_other + k] <- 1 # This works because of how we've arranged the levels - First level_a - level_c then level_b - level_c (same order of the Cs)
-    }
-    colnames(CMat) <- names(estimates$coefficients)
-    # Const equality
-    c <- rep(1/2, L_other)
-
-    # Flag problematic divergences
-    direct_v_indirect = c(CMat%*%estimates$coefficients - c)
-    names(direct_v_indirect) =  gsub(paste0("treatment",level_a,", "), "", names(estimates$coefficients)[2:(L_other+1)])
-
-    # Construct the wald test statistic
-    wald_stat <- t(CMat%*%estimates$coefficients - c)%*%solve((CMat)%*%var_cov%*%t((CMat)))%*%(CMat%*%estimates$coefficients - c)
-
-    #print(var_cov)
-    #print(wald_stat)
-    #print(Wald_test(estimates2, CMat, vcov=vcovCR(estimates2, cluster=data_wide$respid ,type="CR2"), test="chi-sq"))
-    # Get a p-value
-    wald_p <- pchisq(wald_stat, L_other, lower.tail=F)
-
-
-  }else{
-    direct_v_indirect <- NA
-    wald_stat <- NA
-    wald_p <- NA
-  }
-
-  return(list(model_amce = amce_reg, model_afcp = estimates, summary = out_results, L_other = L_other, wald_stat = wald_stat, wald_p = wald_p, direct_indirect = direct_v_indirect, CMat = CMat))
-
-}
 
 #' Make the dataset wide from the default long to estimate AFCPs - drops all observations w/o level_a or level_b
 #' @param indata Dataframe containing the "long" dataset from `cjoint()`
 #' @param amce_var Character name of variable to split on
 #' @param level_a Character denoting the name of the first attribute level of interest
-#' @param level_b Character denoting the name of the first attribute level of interest
-#' @param responseID Character denoting the column identifying the unique respondent
+#' @param level_b Character denoting the name of the second attribute level of interest
+#' @param respondentID Character denoting the column identifying the unique respondent
 #' @param choice Character denoting the column identifying the choice var
 #' @param qid Character denoting the question identifier
 #' @param option Character denoting the identifier for each option/choice
@@ -146,7 +144,7 @@ make.wide.data <- function(indata, amce_var, level_a, level_b, respondentID, cho
   sub <- indata[,c(amce_var, respondentID, choice, qid, option)]
 
   # Rearrange
-  sub <- sub %>% arrange(respid, qid, option)
+  sub <- sub %>% arrange(respondentID, qid, option)
 
   # Split
   sub1 <- sub[sub$cand==1,]
@@ -209,13 +207,18 @@ make.wide.data <- function(indata, amce_var, level_a, level_b, respondentID, cho
 
 }
 
+#' Estimate all relevant FCPs relative to a particular baseline
+fcps.est <- function(indata, amce_var, level_a, level_b){
+  
+  
+}
 
-# Estimate FCPs
-# amce_var: Name of variable
-# cluster: Cluster variable (respondent ID)
-# level_a: First level of variable
-# level_b: Second level of variable
-# level_c: Alternate FCP
+#' Estimate FCPs
+#' amce_var: Name of variable
+#' cluster: Cluster variable (respondent ID)
+#' level_a: First level of variable
+#' level_b: Second level of variable
+#' level_c: Alternate FCP
 fcp.est.3 <- function(indata, amce_var, level_a, level_b, level_c){
 
   # Make the data wide
