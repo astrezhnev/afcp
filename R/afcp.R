@@ -16,10 +16,27 @@ afcp_est <- afcp(results, respondent.id="CaseID", task.id = "contestno", profile
 
 #' Estimates AFCPs from a cjoint object
 #'
+#' This estimates the Average Feature Choice Probability (AFCP) for a given attribute and level combination
+#' using the output from an amce object returned by the cjoint package
+#'
+#' @param cjointobj Object of class `amce` returned by the `amce()` function in the `cjoint` package
+#' @param respondent.id Character denoting the column identifying the unique respondent in the dataset from `cjointobj`
+#' @param task.id Character denoting the column identifying the task/question in the dataset from `cjointobj`
+#' @param profile.id Character denoting the column identifying the profile in each question in the dataset from `cjointobj` - this column should take on either 1 or 2 for a binary choice task
+#' @param attribute Character denoting the attribute of interest
+#' @param baseline Character denoting the level of the attribute to be used as the baseline. Default of `NULL` will pull the baseline from `cjointobj`.
+#'
+#' @return A dataframe
+#' @export
 afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, baseline = NULL){
 
-  # Sanity checks
+  # Clean respondent.id, task.id, profile.id and attribute in line with what amce() does in cjoint
+  respondent.id <- cjoint:::clean.names(respondent.id)
+  task.id <- cjoint:::clean.names(task.id)
+  profile.id <- cjoint:::clean.names(profile.id)
+  attribute <- cjoint:::clean.names(attribute)
 
+  # Sanity checks
   # Is cjointobj an amce object?
   if (class(cjointobj) != "amce"){
     stop("Error: 'cjointobj' not of class 'amce'")
@@ -43,6 +60,8 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
   # If null, choose existing baseline
   if (is.null(baseline)){
     baseline <- cjointobj$baselines[[attribute]]
+  }else{
+    baseline <- cjoint:::clean.names(baseline)
   }
 
   # Error check - is baseline in the list of levels
