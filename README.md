@@ -17,7 +17,7 @@ install.packages("remotes")
 Then install the development version directly from github using
 
 ```{r}
-remotes::install_github("astrezhnev/afcp")
+remotes::install_github("astrezhnev/afcp", build_vignettes = TRUE)
 ```
 
 # Usage
