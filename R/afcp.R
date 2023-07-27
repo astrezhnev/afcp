@@ -1,18 +1,3 @@
-## cjoint - load temp data
-library(cjoint)
-library(estimatr)
-
-# Immigration Choice Conjoint Experiment Data from Hainmueller et. al. (2014).
-data("immigrationconjoint")
-data("immigrationdesign")
-
-# Run AMCE estimator using all attributes in the design
-results <- amce(ChosenImmigrant ~  `Prior Entry`, data=immigrationconjoint,
-                cluster=TRUE, respondent.id="CaseID", design="uniform")
-# Print summary
-summary(results)
-
-afcp_est <- afcp(results, respondent.id="CaseID", task.id = "contestno", profile.id="profile", attribute = "PriorEntry")
 
 #' Estimates AFCPs from a cjoint object
 #'
@@ -25,10 +10,12 @@ afcp_est <- afcp(results, respondent.id="CaseID", task.id = "contestno", profile
 #' @param profile.id Character denoting the column identifying the profile in each question in the dataset from `cjointobj` - this column should take on either 1 or 2 for a binary choice task
 #' @param attribute Character denoting the attribute of interest
 #' @param baseline Character denoting the level of the attribute to be used as the baseline. Default of `NULL` will pull the baseline from `cjointobj`.
+#' @param ci Numeric between 0 and 1 denoting the size of the confidence interval to report for each afcp
 #'
-#' @return A dataframe
+#' @return A list containing three dataframes
+#' - `afcp` - A dataframe containing estimated AFCPs relative to the selected baseline level.
 #' @export
-afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, baseline = NULL){
+afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, baseline = NULL, ci = .95){
 
   # Clean respondent.id, task.id, profile.id and attribute in line with what amce() does in cjoint
   respondent.id <- cjoint:::clean.names(respondent.id)
@@ -45,6 +32,11 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
   # Is attribute in cjointobj
   if (!(attribute %in% names(cjointobj$attributes))){
     stop("Error: 'attribute' not in list of attributes in 'cjointobj'")
+  }
+
+  # Is CI valid
+  if (!(ci < 1&0 < ci)){
+    stop("Error: `ci` invalid -- must be between 0 and 1")
   }
 
   # Get dataset
@@ -76,17 +68,20 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
   data[[attribute]] <- cjoint:::clean.names(as.character(data[[attribute]]))
 
   # For each non-baseline attribute, estimate the AFCP relative to the baseline.
-  afcp_list <- list()
+  afcp_results <- list() # Store the estimates + p-values
+  wald_tests <- list() # Combined wald tests for cycling
+  wald_three_level <- list() # Three-level tests for each pair
+
   for (level in attr_use){
     # Make the data wide
-    wide_data <- make.wide.data(indata=data, amce_var = attribute, level_a = level, level_b = baseline,
+    wide_data <- make.wide.data(indata=data, attr_var = attribute, level_a = level, level_b = baseline,
                                 respondentID = respondent.id, choice = choice.outcome, qid = task.id, option = profile.id)
 
     # Get estimates
-    estimates <- lm_robust(choose ~ treatment, data=wide_data, cluster=respid) # respid = respondent ID from wide_data
+    estimates <- lm(choose ~ treatment, data=wide_data) # respid = respondent ID from wide_data
 
     # Variance-covariance matrix
-    var_cov <- vcov(estimates)
+    var_cov <- sandwich::vcovCL(estimates, cluster = wide_data$respid, type = "HC2")
 
     # Get AFCPs from model
     afcp_est = c(estimates$coefficients[1])
@@ -95,11 +90,13 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
     afcp_se = sqrt(c(var_cov[1,1]))
 
     # Generate results matrix
-    out_results <- data.frame(name = paste(level, baseline, sep = ", "), afcp = afcp_est, afcp_centered = afcp_est - .5, se = afcp_se)
-    out_results$afcp_zstat <- (out_results$afcp - .5)/out_results$se
-    out_results$afcp_pval <- 2*pnorm(-abs(out_results$afcp_zstat))
+    out_results <- data.frame(level = level, baseline = baseline, afcp = afcp_est, se = afcp_se)
+    out_results$zstat <- (out_results$afcp - .5)/out_results$se
+    out_results$pval <- 2*pnorm(-abs(out_results$zstat))
 
     rownames(out_results) <- NULL
+    # Store the results for this level
+    afcp_results[[level]] <- out_results
 
     # Wald test for AFCP-transitivity
     # AFCP(a,b) - 1/2 = AFCP(a,c) - AFCP(b,c)
@@ -110,6 +107,57 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
 
     # If there's more than two levels
     if (L_other > 0){
+
+      # Get names of the other levels sorted alphabetically
+      other_levels <- sort(attr_use[attr_use != level])
+
+      #####
+      # For each other level, test for direct vs. indirect equivalence.
+      #####
+
+      wald_threes <- list()
+      for (next_L in 1:L_other){
+
+        # Pull the coefficients for each of the three levels
+        coef_sub <- estimates$coefficients[c(1, 1 + next_L, 1 + L_other + next_L)]
+
+        # Do the same for the variance-covariance matrix
+        vcov_sub <- var_cov[c(1, 1 + next_L, 1 + L_other + next_L),][,c(1, 1 + next_L, 1 + L_other + next_L)]
+
+        # Constraint Mat
+        CMat_3 <- matrix(nrow=1, ncol=3)
+        CMat_3[1,] <- c(1, -1, 1)
+        # Const equality
+        c <- 1/2
+
+        # Construct the wald test statistic
+        wald_stat_3 <- t(CMat_3%*%coef_sub - c)%*%solve(CMat_3%*%vcov_sub%*%t(CMat_3))%*%(CMat_3%*%coef_sub - c)
+
+        # Get a p-value
+        wald_p_3 <- pchisq(wald_stat_3, 1, lower.tail = F)
+
+        # Get AFCPs from model
+        afcp_3_est = c(coef_sub[1], coef_sub[2] + coef_sub[1], coef_sub[3] + coef_sub[1])
+
+        # Get standard errors
+        afcp_3_se = sqrt(c(vcov_sub[1,1], vcov_sub[1,1] + vcov_sub[2,2] + 2*vcov_sub[1,2], vcov_sub[1,1] + vcov_sub[3,3] + 2*vcov_sub[1,3]))
+
+
+        wald_threes[[other_levels[next_L]]] <- data.frame(level = level, baseline = baseline, third = other_levels[next_L], afcp_level_baseline = afcp_3_est[1], se_level_baseline = afcp_3_se[1],
+                                                                afcp_level_third = afcp_3_est[2], se_level_third = afcp_3_se[2],
+                                                                afcp_baseline_third = afcp_3_est[3], se_baseline_third = afcp_3_se[3],
+                                                                direct = afcp_3_est[1] - .5, indirect = afcp_3_est[2] - afcp_3_est[3],
+                                                                wald_stat = wald_stat_3, wald_p = wald_p_3)
+
+      }
+
+      wald_three_level[[level]] <- bind_rows(wald_threes)
+      rownames(wald_three_level[[level]]) <- NULL
+
+      #######
+      ### Complete test
+      ######
+
       # Constraint Mat
       CMat <- matrix(nrow=L_other, ncol=length(estimates$coefficients)) # L-2 constraints
       for (k in 1:L_other){
@@ -122,31 +170,38 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
       # Const equality
       c <- rep(1/2, L_other)
 
-      # Flag problematic divergences
-      direct_v_indirect = c(CMat%*%estimates$coefficients - c)
-      names(direct_v_indirect) =  gsub(paste0("treatment",level,", "), "", names(estimates$coefficients)[2:(L_other+1)])
-
       # Construct the wald test statistic
-      wald_stat <- t(CMat%*%estimates$coefficients - c)%*%solve((CMat)%*%var_cov%*%t((CMat)))%*%(CMat%*%estimates$coefficients - c)
+      wald_stat_all <- t(CMat%*%estimates$coefficients - c)%*%solve((CMat)%*%var_cov%*%t((CMat)))%*%(CMat%*%estimates$coefficients - c)
 
       # Get a p-value
-      wald_p <- pchisq(wald_stat, L_other, lower.tail=F)
-    }else{
-      direct_v_indirect <- NA
-      wald_stat <- NA
-      wald_p <- NA
-    }
+      wald_p_all <- pchisq(wald_stat_all, L_other, lower.tail=F)
+      wald_tests[[level]] <-  data.frame(level = level, baseline = baseline, L_other = L_other, wald_stat_all, wald_p_all)
 
-    afcp_list[[level]] <- list(model_afcp = estimates, summary = out_results, L_other = L_other, wald_stat = wald_stat, wald_p = wald_p, direct_indirect = direct_v_indirect, CMat = CMat)
+
+
+    }
   }
 
-  return(afcp_list)
+  # Construct the output
+
+  if (length(attr_use) > 1){
+    afcp_estimates <- bind_rows(afcp_results)
+    wald_batch <- bind_rows(wald_tests)
+
+    return(list(attribute = attribute, baseline = baseline, afcp = afcp_estimates, wald = wald_batch, wald_three_level = bind_rows(wald_three_level)))
+  }else{
+    afcp_estimates <- bind_rows(afcp_results)
+    return(list(afcp = afcp_estimates, wald = NULL, wald_three_level = NULL))
+
+  }
+
 }
 
 
 #' Make the dataset wide from the default long to estimate AFCPs - drops all observations w/o level_a or level_b
+#'
 #' @param indata Dataframe containing the "long" dataset from `cjoint()`
-#' @param amce_var Character name of the attribute to split on
+#' @param attr_var Character name of the attribute to split on
 #' @param level_a Character denoting the name of the first attribute level of interest
 #' @param level_b Character denoting the name of the second attribute level of interest
 #' @param respondentID Character denoting the column identifying the unique respondent
@@ -154,12 +209,20 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
 #' @param qid Character denoting the question identifier
 #' @param option Character denoting the identifier for each option/choice
 
-#' @return A dataframe with the following columns
+#' @return A dataframe with the following columns:
+#' - `respid` - Respondent identifier
+#' - `qid` - Task/question identifier
+#' - `choose` - An indicator for whether the profile with `val1` is selected in this task.
+#' - `treatment` - Character concatenating the two levels of interest `val1` and `val2`
+#' - `val1` - Level assigned to the attribute of interest for profile 1
+#' - `val2` - Level assigned to the attribute of interest for profile 2
+#'
+#' @export
 
-make.wide.data <- function(indata, amce_var, level_a, level_b, respondentID, choice, qid, option){
+make.wide.data <- function(indata, attr_var, level_a, level_b, respondentID, choice, qid, option){
 
   # Get attribute, question, respondent, and answers
-  sub <- indata[,c(amce_var, respondentID, choice, qid, option)]
+  sub <- indata[,c(attr_var, respondentID, choice, qid, option)]
 
   # Sanity checks
   # There must only be two options
@@ -227,61 +290,5 @@ make.wide.data <- function(indata, amce_var, level_a, level_b, respondentID, cho
 
   # Return it
   return(sub_final %>% select(respid, qid, choose = choose1, treatment, val1, val2))
-
-}
-
-#' Estimate FCPs
-#' amce_var: Name of variable
-#' cluster: Cluster variable (respondent ID)
-#' level_a: First level of variable
-#' level_b: Second level of variable
-#' level_c: Alternate FCP
-fcp.est.3 <- function(indata, amce_var, level_a, level_b, level_c){
-
-  # Make the data wide
-  data_wide <- make.wide.data(indata, amce_var, level_a, level_b)
-
-  # Subset out level_c
-  data_wide <- data_wide %>% filter((val1 == level_a&val2 == level_b)|val2 == level_c)
-
-  # Get estimates
-  estimates <- lm_robust(choose ~ treatment, data=data_wide, cluster=respid) # hardcoding respid cluster for now
-
-  afcp_names = c(paste(level_a, level_b, sep=", "), levels(data_wide$treatment)[grepl(level_c, levels(data_wide$treatment))])
-
-  # Variance-covariance matrix
-  var_cov <- vcov(estimates)
-
-  # Get AFCPs from model
-  afcp_est = c(estimates$coefficients[1], estimates$coefficients[2] + estimates$coefficients[1], estimates$coefficients[3] + estimates$coefficients[1])
-
-  # Get standard errors
-  afcp_se = sqrt(c(var_cov[1,1], var_cov[1,1] + var_cov[2,2] + 2*var_cov[1,2], var_cov[1,1] + var_cov[3,3] + 2*var_cov[1,3]))
-
-  # Generate results matrix
-  out_results <- data.frame(name = afcp_names, afcp = afcp_est, se = afcp_se)
-  out_results$zstat <- (out_results$afcp - .5)/out_results$se
-  out_results$pval <- 2*pnorm(-abs(out_results$zstat))
-
-  rownames(out_results) <- NULL
-
-  # Wald test for AFCP-transitivity
-  # AFCP(a,b) - 1/2 = AFCP(a,c) - AFCP(b,c)
-  # \beta_0 - \beta_1 + \beta_2 = 1/2
-
-  # Constraint Mat
-  CMat <- matrix(nrow=1, ncol=3)
-  CMat[1,] <- c(1, -1, 1)
-  # Const equality
-  c <- 1/2
-
-  # Construct the wald test statistic
-  # Construct the wald test statistic
-  wald_stat <- t(CMat%*%estimates$coefficients - c)%*%solve(CMat%*%var_cov%*%t(CMat))%*%(CMat%*%estimates$coefficients - c)
-
-  # Get a p-value
-  wald_p <- pchisq(wald_stat, 1, lower.tail = F)
-
-  return(list(model = estimates, summary = out_results, wald_stat = wald_stat, wald_p = wald_p))
 
 }
