@@ -14,23 +14,55 @@ knitr::opts_chunk$set(
 )
 ```
 
+This vignette illustrates how to estimate average feature choice probabilities using the `afcp` package and the output of the `amce()` function from the package `cjoint`. 
+
+In a binary choice conjoint task, the average feature choice probability between two levels $a$ and $b$ of attribute $l$ or $AFCP_l(a, b)$ captures the share of comparisons in which the profile where attribute $l$ is set to $a$ is selected over another profile in which attribute $l$ is set to $b$.  
+
 ```{r setup}
 library(cjoint)
-#library(afcp)
+library(afcp)
 ```
 
-Testing with cjoint here
+We will use the immigration conjoint example built into the `cjoint` package.
 
 ```{r}
 data("immigrationconjoint")
-data("immigrationdesign")
-
-# Run AMCE estimator using all attributes in the design
-results <- amce(Chosen_Immigrant ~ Gender + Education + `Language Skills` +
-`Country of Origin` + Job + `Job Experience` + `Job Plans` +
-`Reason for Application` + `Prior Entry`, data=immigrationconjoint,
-cluster=TRUE, respondent.id="CaseID", design=immigrationdesign)
-
-# For each attribute in the model 
-
 ```
+
+In this design, some cross-attribute restrictions were imposed. Here we will focus on an attribute that was assigned completely at random: `Language Skills`. This attribute has three levels
+
+```{r}
+table(immigrationconjoint$`Language Skills`)
+```
+
+We start by running the estimator in `cjoint` - as we are focusing on an attribute with no randomization restrictions, we can specify "uniform" randomization.
+
+```{r}
+amce_results <- amce(Chosen_Immigrant ~ `Language Skills`, data=immigrationconjoint, cluster=T, respondent.id = "CaseID", design = "uniform")
+```
+
+The output of `amce()` is an `amce` object which the `afcp()` function takes as input. For `afcp()`, we also need to specify the names of the columns denoting the task and profile as well as the respondent identifier. By default,
+`afcp()` will use the baseline level from the `amce` object, but this can be overriden using the `baseline` argument. 
+
+```{r}
+afcp_results <- afcp(amce_results, respondent.id = "CaseID", task.id = "contest_no", profile.id = "profile", attribute = "Language Skills")
+```
+
+`afcp()` returns a list with three dataframes. The first, `afcp`, contains the estimated AFCPs for each attribute level relative to the specified baseline as well as z-statistics and p-values for the hypothesis test of the null that the AFCP is equivalent to $0.5$.
+
+```{r}
+afcp_results$afcp
+```
+
+The second data frame, `wald`, contains the wald test statistics and p-values for the hypothesis test of the restriction that the direct ($AFCP_l(a,b) - .5$) and indirect ($AFCP_l(a,c) - AFCP_l(b,c)$) preference measures are equivalent for all other levels $c$ in the attribute.
+
+```{r}
+afcp_results$wald
+```
+
+The third data frame, `direct_indirect` contains the estimated direct ($AFCP_l(a,b) - .5$) and indirect ($AFCP_l(a,c) - AFCP_l(b,c)$) preference measures for each other attribute level $c$.
+
+```{r}
+afcp_results$direct_indirect
+```
+

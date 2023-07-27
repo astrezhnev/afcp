@@ -4,6 +4,10 @@
 #' This estimates the Average Feature Choice Probability (AFCP) for a given attribute and level combination
 #' using the output from an amce object returned by the cjoint package
 #'
+#' @import cjoint
+#' @import dplyr
+#' @import sandwich
+#'
 #' @param cjointobj Object of class `amce` returned by the `amce()` function in the `cjoint` package
 #' @param respondent.id Character denoting the column identifying the unique respondent in the dataset from `cjointobj`
 #' @param task.id Character denoting the column identifying the task/question in the dataset from `cjointobj`
@@ -14,7 +18,10 @@
 #'
 #' @return A list containing three dataframes
 #' - `afcp` - A dataframe containing estimated AFCPs relative to the selected baseline level.
+#' - `wald` - A dataframe containing the results for the aggregate Wald test of the equivalence of direct and indirect preferences across all other levels
+#' - `wald_three_level` - A dataframe containing the direct (AFCP) and indirect (difference in AFCPs) preference estimates across all other levels
 #' @export
+#'
 afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, baseline = NULL, ci = .95){
 
   # Clean respondent.id, task.id, profile.id and attribute in line with what amce() does in cjoint
@@ -93,6 +100,12 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
     out_results <- data.frame(level = level, baseline = baseline, afcp = afcp_est, se = afcp_se)
     out_results$zstat <- (out_results$afcp - .5)/out_results$se
     out_results$pval <- 2*pnorm(-abs(out_results$zstat))
+
+
+    out_results$conf_high <- afcp_est + abs(qnorm((1-ci)/2))*afcp_se
+    out_results$conf_low <- afcp_est - abs(qnorm((1-ci)/2))*afcp_se
+    out_results$conf_level <- ci
+
 
     rownames(out_results) <- NULL
     # Store the results for this level
@@ -188,10 +201,10 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
     afcp_estimates <- bind_rows(afcp_results)
     wald_batch <- bind_rows(wald_tests)
 
-    return(list(attribute = attribute, baseline = baseline, afcp = afcp_estimates, wald = wald_batch, wald_three_level = bind_rows(wald_three_level)))
+    return(list(attribute = attribute, baseline = baseline, afcp = afcp_estimates, wald = wald_batch, direct_indirect = bind_rows(wald_three_level)))
   }else{
     afcp_estimates <- bind_rows(afcp_results)
-    return(list(afcp = afcp_estimates, wald = NULL, wald_three_level = NULL))
+    return(list(afcp = afcp_estimates, wald = NULL, direct_indirect = NULL))
 
   }
 

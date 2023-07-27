@@ -6,11 +6,15 @@ Authors@R:
     person("Korhan", "Kocak", , "kkocak@nyu.edu", role = c("aut"))
     person("Asya", "Magazinnik", , "asyam@mit.edu", role = c("aut"))
     person("Anton", "Strezhnev", , "astrezhnev@uchicago.edu", role = c("aut", "cre"))
-Description: This package implements the estimators and statistical tests described in Abramson, Scott F., Korhan Kocak, Asya Magazinnik, and Anton Strezhnev. "Detecting Preference Cycles in Forced-Choice Conjoint Experiments." (2022).
+Description: This package implements the estimators and statistical tests described in Abramson, Scott F., Korhan Kocak, Asya Magazinnik, and Anton Strezhnev. "Detecting Preference Cycles in Forced-Choice Conjoint Experiments." (2023).
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.2.1
+RoxygenNote: 7.2.3
+Imports:
+    cjoint
+    sandwich
+    dplyr
 Suggests: 
     knitr,
     rmarkdown
