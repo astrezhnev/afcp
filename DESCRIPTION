@@ -1,6 +1,6 @@
 Package: afcp
 Title: Average Feature Choice Probability Estimator for Conjoint Experiments
-Version: 0.0.0.9000
+Version: 0.0.0.9001
 Authors@R: 
     person("Scott", "Abramson", , "sabramso@ur.rochester.edu", role = c("aut"))
     person("Korhan", "Kocak", , "kkocak@nyu.edu", role = c("aut"))

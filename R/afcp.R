@@ -19,7 +19,7 @@
 #' @return A list containing three dataframes
 #' - `afcp` - A dataframe containing estimated AFCPs relative to the selected baseline level.
 #' - `wald` - A dataframe containing the results for the aggregate Wald test of the equivalence of direct and indirect preferences across all other levels
-#' - `wald_three_level` - A dataframe containing the direct (AFCP) and indirect (difference in AFCPs) preference estimates across all other levels
+#' - `direct_indirect` - A dataframe containing the direct (AFCP) and indirect (difference in AFCPs) preference estimates across all other levels
 #' @export
 #'
 afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, baseline = NULL, ci = .95){
@@ -156,9 +156,10 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
         afcp_3_se = sqrt(c(vcov_sub[1,1], vcov_sub[1,1] + vcov_sub[2,2] + 2*vcov_sub[1,2], vcov_sub[1,1] + vcov_sub[3,3] + 2*vcov_sub[1,3]))
 
 
-        wald_threes[[other_levels[next_L]]] <- data.frame(level = level, baseline = baseline, third = other_levels[next_L], afcp_level_baseline = afcp_3_est[1], se_level_baseline = afcp_3_se[1],
-                                                                afcp_level_third = afcp_3_est[2], se_level_third = afcp_3_se[2],
-                                                                afcp_baseline_third = afcp_3_est[3], se_baseline_third = afcp_3_se[3],
+        wald_threes[[other_levels[next_L]]] <- data.frame(level_a = level, level_b = baseline, level_c = other_levels[next_L], afcp_ab = afcp_3_est[1], afcp_ac = afcp_3_est[2], afcp_bc = afcp_3_est[3], 
+                                                                se_afcp_ab = afcp_3_se[1],
+                                                                se_afcp_ac = afcp_3_se[2],
+                                                                se_afcp_bc = afcp_3_se[3],
                                                                 direct = afcp_3_est[1] - .5, indirect = afcp_3_est[2] - afcp_3_est[3],
                                                                 wald_stat = wald_stat_3, wald_p = wald_p_3)
 
