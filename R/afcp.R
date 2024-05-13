@@ -48,13 +48,18 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
 
   # Get dataset
   data <- cjointobj$data
-
+  
   # Get formula and outcome
-  choice.outcome =  cjoint:::clean.names(as.character(cjointobj$formula)[2])
+  choice.outcome =  cjoint:::clean.names(all.vars(cjointobj$formula)[1])
 
   # Get the list of levels
   attr_levels <- cjointobj$attributes[[attribute]]
 
+  # If fewer then three levels, send error
+  if(length(attr_levels) <= 2){
+    stop(paste("Error: Not more than 2 levels in `attribute`", sep=""))
+  }
+  
   # Get the baseline
   # If null, choose existing baseline
   if (is.null(baseline)){
@@ -78,7 +83,7 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
   afcp_results <- list() # Store the estimates + p-values
   wald_tests <- list() # Combined wald tests for cycling
   wald_three_level <- list() # Three-level tests for each pair
-
+  
   for (level in attr_use){
     # Make the data wide
     wide_data <- make.wide.data(indata=data, attr_var = attribute, level_a = level, level_b = baseline,
