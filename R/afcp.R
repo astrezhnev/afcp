@@ -52,6 +52,16 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
   # Get formula and outcome
   choice.outcome =  cjoint:::clean.names(all.vars(cjointobj$formula)[1])
 
+  # Is the choice outcome a number
+  if (!all(data[[choice.outcome]] %in% c(0,1))){
+    stop("Error: Outcome is not a binary indicator (0 or 1)")
+  }
+  
+  # Does the number of choices equal the number of tasks
+  if (nrow(data)/2 != sum(data[[choice.outcome]])){
+    stop("Error: Number of choices doesn't equal number of tasks. Likely some tasks have neither or both options selected")
+  }
+  
   # Get the list of levels
   attr_levels <- cjointobj$attributes[[attribute]]
 
@@ -269,7 +279,7 @@ make.wide.data <- function(indata, attr_var, level_a, level_b, respondentID, cho
 
   # Get all of the possible levels of the amce var ordered alphabetically
   level_list = sort(unique(c(sub_merge$val1, sub_merge$val2)))
-
+  
   # Flip so that we get no AFCPs that are duplicated
   sub_final <- sub_merge
 
@@ -308,6 +318,6 @@ make.wide.data <- function(indata, attr_var, level_a, level_b, respondentID, cho
   sub_final$treatment <- factor(sub_final$treatment, levels = level_order)
 
   # Return it
-  return(sub_final %>% select(respid, qid, choose = choose1, treatment, val1, val2))
+  return(sub_final %>% dplyr:::select(respid, qid, choose = choose1, treatment, val1, val2))
 
 }
