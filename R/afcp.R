@@ -15,6 +15,7 @@
 #' @param attribute Character denoting the attribute of interest
 #' @param baseline Character denoting the level of the attribute to be used as the baseline. Default of `NULL` will pull the baseline from `cjointobj`.
 #' @param ci Numeric between 0 and 1 denoting the size of the confidence interval to report for each afcp
+#' @param vcov_type Character passed to the `type` argument of `sandwich::vcovCL()` for the cluster-robust (by respondent) variance. The default `"HC2"` is the CR2 (Bell-McCaffrey) estimator, as in `estimatr::lm_robust()`; `"HC1"` matches the standard errors from `cjoint::amce()`.
 #'
 #' @return A list containing three dataframes
 #' - `afcp` - A dataframe containing estimated AFCPs relative to the selected baseline level.
@@ -22,72 +23,18 @@
 #' - `direct_indirect` - A dataframe containing the direct (AFCP) and indirect (difference in AFCPs) preference estimates across all other levels
 #' @export
 #'
-afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, baseline = NULL, ci = .95){
+afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, baseline = NULL, ci = .95, vcov_type = "HC2"){
 
-  # Clean respondent.id, task.id, profile.id and attribute in line with what amce() does in cjoint
-  respondent.id <- cjoint:::clean.names(respondent.id)
-  task.id <- cjoint:::clean.names(task.id)
-  profile.id <- cjoint:::clean.names(profile.id)
-  attribute <- cjoint:::clean.names(attribute)
-
-  # Sanity checks
-  # Is cjointobj an amce object?
-  if (class(cjointobj) != "amce"){
-    stop("Error: 'cjointobj' not of class 'amce'")
-  }
-
-  # Is attribute in cjointobj
-  if (!(attribute %in% names(cjointobj$attributes))){
-    stop("Error: 'attribute' not in list of attributes in 'cjointobj'")
-  }
-
-  # Is CI valid
-  if (!(ci < 1&0 < ci)){
-    stop("Error: `ci` invalid -- must be between 0 and 1")
-  }
-
-  # Get dataset
-  data <- cjointobj$data
-  
-  # Get formula and outcome
-  choice.outcome =  cjoint:::clean.names(all.vars(cjointobj$formula)[1])
-
-  # Is the choice outcome a number
-  if (!all(data[[choice.outcome]] %in% c(0,1))){
-    stop("Error: Outcome is not a binary indicator (0 or 1)")
-  }
-  
-  # Does the number of choices equal the number of tasks
-  if (nrow(data)/2 != sum(data[[choice.outcome]])){
-    stop("Error: Number of choices doesn't equal number of tasks. Likely some tasks have neither or both options selected")
-  }
-  
-  # Get the list of levels
-  attr_levels <- cjointobj$attributes[[attribute]]
-
-  # If fewer then three levels, send error
-  if(length(attr_levels) <= 2){
-    stop(paste("Error: Not more than 2 levels in `attribute`", sep=""))
-  }
-  
-  # Get the baseline
-  # If null, choose existing baseline
-  if (is.null(baseline)){
-    baseline <- cjointobj$baselines[[attribute]]
-  }else{
-    baseline <- cjoint:::clean.names(baseline)
-  }
-
-  # Error check - is baseline in the list of levels
-  if (!(baseline %in% attr_levels)){
-    stop(paste("Error: 'baseline', ", baseline,  ", not in levels of 'attribute'", sep=""))
-  }
-
-  # Drop baseline among usable levels
-  attr_use <- attr_levels[attr_levels != baseline]
-
-  # Clean the data columns using cjoint's clean.names() function
-  data[[attribute]] <- cjoint:::clean.names(as.character(data[[attribute]]))
+  # Shared input checks and cleaning (see utils.R)
+  setup <- afcp_setup(cjointobj, respondent.id, task.id, profile.id, attribute, baseline, ci)
+  respondent.id <- setup$respondent.id
+  task.id <- setup$task.id
+  profile.id <- setup$profile.id
+  attribute <- setup$attribute
+  data <- setup$data
+  choice.outcome <- setup$choice.outcome
+  baseline <- setup$baseline
+  attr_use <- setup$attr_use
 
   # For each non-baseline attribute, estimate the AFCP relative to the baseline.
   afcp_results <- list() # Store the estimates + p-values
@@ -103,7 +50,7 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
     estimates <- lm(choose ~ treatment, data=wide_data) # respid = respondent ID from wide_data
 
     # Variance-covariance matrix
-    var_cov <- sandwich::vcovCL(estimates, cluster = wide_data$respid, type = "HC2")
+    var_cov <- sandwich::vcovCL(estimates, cluster = as.character(wide_data$respid), type = vcov_type) # as.character: vcovCL's HC2 is wrong when the cluster is a factor with unused levels
 
     # Get AFCPs from model
     afcp_est = c(estimates$coefficients[1])
@@ -255,7 +202,7 @@ make.wide.data <- function(indata, attr_var, level_a, level_b, respondentID, cho
 
   # Sanity checks
   # There must only be two options
-  if (!identical(unique(sub[[option]]), c(1,2))){
+  if (!setequal(unique(sub[[option]]), c(1,2))){ # setequal: identical() fails on integer ids or if profile 2 comes first
     stop("Error: Conjoint contains tasks with more than two profiles")
   }
 

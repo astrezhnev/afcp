@@ -14,6 +14,9 @@ knitr::opts_chunk$set(
 )
 ```
 
+
+## Estimating the AFCP and testing for divergence in direct and indirect comparisons
+
 This vignette illustrates how to estimate average feature choice probabilities using the `afcp` package and the output of the `amce()` function from the package `cjoint`. 
 
 In a binary choice conjoint task, the average feature choice probability between two levels $a$ and $b$ of attribute $l$ or $AFCP_l(a, b)$ captures the share of comparisons in which the profile where attribute $l$ is set to $a$ is selected over another profile in which attribute $l$ is set to $b$.  
@@ -43,7 +46,7 @@ summary(amce_results)
 ```
 
 The output of `amce()` is an `amce` object which the `afcp()` function takes as input. For `afcp()`, we also need to specify the names of the columns denoting the task and profile as well as the respondent identifier. By default,
-`afcp()` will use the baseline level from the `amce` object, but this can be overriden using the `baseline` argument. 
+`afcp()` will use the baseline level from the `amce` object, but this can be overridden using the `baseline` argument. 
 
 ```{r}
 afcp_results <- afcp(amce_results, respondent.id = "CaseID", task.id = "contest_no", profile.id = "profile", attribute = "Language Skills")
@@ -69,3 +72,65 @@ afcp_results$direct_indirect
 
 Here we have some evidence of a divergence between direct and indirect preferences. Respondents strongly prefer, in pairwise comparisons, an immigrant who speaks fluent English over one who speaks broken English. However, they appear to prefer an immigrant who speaks broken English to one who speaks through an interpreter at about the same level as they prefer an immigrant who speaks fluent English to one who speaks through an interpreter.
 
+## Assessing the sensitivity of AMCE estimates to the inclusion of different indirect comparisons
+
+The package also implements a diagnostic tool for assessing the sensitivity of an AMCE estimate to the inclusion of different combinations of the indirect comparisons. `spec_curve()` plots the estimated AMCE between levels $a$ and $b$ across every possible inclusion or exclusion of the other levels of that attribute. For an attribute with $D$ levels, this generates a plot of $2^{D-2}$ possible treatment effects, arranged by magnitudered.
+
+Here we look at broken English relative to fluent English. Level names can be passed as they appear in the data.
+
+```{r}
+sc <- spec_curve(amce_results, respondent.id = "CaseID", task.id = "contest_no",
+                 attribute = "Language Skills",
+                 level_a = "broken English", level_b = "fluent English")
+sc
+```
+
+The output is a data frame sorted by the estimate. `held_out` lists the levels dropped in each specification and `type` identifies the AMCE and (re-centered) AFCP specifications. The `plot()` method draws the curve with confidence intervals and highlights the AMCE (blue by default) and the (re-centered) AFCP (red by default).
+
+```{r, fig.width = 6, fig.height = 4}
+plot(sc)
+```
+
+The highlight colors can be changed with the `colors` argument, a named vector with elements `AMCE` and/or `AFCP`.
+
+```{r, fig.width = 6, fig.height = 4}
+plot(sc, colors = c(AMCE = "darkorange", AFCP = "darkgreen"))
+```
+
+Language Skills has only four levels, so the curve has just $2^2 = 4$ specifications, but the example highlights how changes in the comparison set can substantially alter the findings. The AMCE of broken English relative to fluent English is about $-0.06$. Keeping only the direct comparisons yields a point estimate of $-0.10$. Adding comparisons against "used interpreter" moves the estimate toward zero, consistent with the pattern of AFCP estimates from above. Respondents dislike broken English much more when it is set directly against fluent English than when both are compared against speaking through an interpreter.
+
+## Efficient estimation by GMM
+
+Lastly, the package includes a Generalized Method of Moments estimator, `afcp_gmm()`, for estimating the AFCPs more efficiently when researchers are willing to assume that direct and indirect comparisons are equal.
+
+This is essentially equivalent to estimating and transforming the AMCEs into their implied AFCPs, but yields a more efficient estimator of the underlying quantities. 
+`afcp_gmm()` stacks the direct moment conditions with the constraint conditions $AFCP_l(a,b) - 0.5 = AFCP_l(a,c) - AFCP_l(b,c)$ and estimates by efficient GMM. The weight matrix is the inverse of the respondent-clustered covariance of the pairwise AFCP estimates, the same covariance `afcp()` uses. `afcp_gmm()` takes the same arguments as `afcp()`.
+
+```{r}
+gmm_results <- afcp_gmm(amce_results, respondent.id = "CaseID", task.id = "contest_no",
+                        profile.id = "profile", attribute = "Language Skills")
+```
+
+The `afcp` data frame has the same columns as the one returned by `afcp()`.
+
+```{r}
+gmm_results$afcp
+```
+
+Comparing the two estimators shows the precision gain from the extra moment conditions:
+
+```{r}
+data.frame(level = afcp_results$afcp$level,
+           afcp = afcp_results$afcp$afcp, se_afcp = afcp_results$afcp$se,
+           gmm = gmm_results$afcp$afcp, se_gmm = gmm_results$afcp$se)
+```
+
+If direct and indirect preferences diverge, the GMM estimator is biased for the AFCP. `afcp_gmm()` therefore also reports the Hansen $J$-test of the over-identifying restrictions for each level in `jtest`. `L_other` is the number of over-identifying restrictions, which is the degrees of freedom of the test.
+
+```{r}
+gmm_results$jtest
+```
+
+The $J$-statistic is numerically identical to the joint Wald statistic in `afcp_results$wald`, since both test the same restrictions with the same covariance matrix. Here the test rejects at the 5% level for broken English and for used interpreter. 
+
+`afcp()`, `afcp_gmm()` and `spec_curve()` all accept a `vcov_type` argument, which is passed to `sandwich::vcovCL()`. The default, `"HC2"`, is the CR2 (Bell-McCaffrey) cluster-robust estimator. Setting `vcov_type = "HC1"` reproduces the standard errors reported by `cjoint::amce()`.

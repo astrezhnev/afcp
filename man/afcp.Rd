@@ -11,7 +11,8 @@ afcp(
   profile.id,
   attribute,
   baseline = NULL,
-  ci = 0.95
+  ci = 0.95,
+  vcov_type = "HC2"
 )
 }
 \arguments{
@@ -28,13 +29,15 @@ afcp(
 \item{baseline}{Character denoting the level of the attribute to be used as the baseline. Default of \code{NULL} will pull the baseline from \code{cjointobj}.}
 
 \item{ci}{Numeric between 0 and 1 denoting the size of the confidence interval to report for each afcp}
+
+\item{vcov_type}{Character passed to the \code{type} argument of \code{sandwich::vcovCL()} for the cluster-robust (by respondent) variance. The default \code{"HC2"} is the CR2 (Bell-McCaffrey) estimator, as in \code{estimatr::lm_robust()}; \code{"HC1"} matches the standard errors from \code{cjoint::amce()}.}
 }
 \value{
 A list containing three dataframes
 \itemize{
 \item \code{afcp} - A dataframe containing estimated AFCPs relative to the selected baseline level.
 \item \code{wald} - A dataframe containing the results for the aggregate Wald test of the equivalence of direct and indirect preferences across all other levels
-\item \code{wald_three_level} - A dataframe containing the direct (AFCP) and indirect (difference in AFCPs) preference estimates across all other levels
+\item \code{direct_indirect} - A dataframe containing the direct (AFCP) and indirect (difference in AFCPs) preference estimates across all other levels
 }
 }
 \description{
