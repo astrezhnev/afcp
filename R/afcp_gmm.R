@@ -97,7 +97,7 @@ gmm_fit_influence <- function(wide_data, level_a, level_b, vcov_type){
   L_other <- pairs$L_other
 
   # Cell-means regression: coefficients are the pairwise AFCPs
-  pair_id <- factor(max.col(pairs$ind), levels = seq_len(ncol(pairs$ind)))
+  pair_id <- factor(max.col(pairs$ind, ties.method = "first"), levels = seq_len(ncol(pairs$ind))) # "first": the default "random" draws from the RNG
   fit <- lm(wide_data$choose ~ pair_id - 1)
   V <- sandwich::vcovCL(fit, cluster = as.character(wide_data$respid), type = vcov_type) # as.character: vcovCL's HC2 is wrong when the cluster is a factor with unused levels
 

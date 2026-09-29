@@ -66,3 +66,15 @@ test_that("integer or reordered profile ids are accepted", {
   a_int <- afcp(fit_cjoint(dat_int), "unit", "task", "profile", "attribute", baseline = "B")
   expect_equal(a_int$afcp, a$afcp)
 })
+
+test_that("estimators do not consume random numbers", {
+  dat <- sim_conjoint(N = 200, K = 5, lvls = c("A", "B", "C", "D"),
+                      afcps = c(AB = .6, AC = .4, BC = .6))
+  cj <- fit_cjoint(dat)
+  set.seed(42)
+  seed_before <- .Random.seed
+  afcp(cj, "unit", "task", "profile", "attribute", baseline = "B")
+  afcp_gmm(cj, "unit", "task", "profile", "attribute", baseline = "B")
+  spec_curve(cj, "unit", "task", "attribute", level_a = "A", level_b = "B")
+  expect_identical(.Random.seed, seed_before)
+})
