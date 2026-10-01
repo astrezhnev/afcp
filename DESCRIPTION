@@ -6,7 +6,7 @@ Authors@R:
     person("Korhan", "Kocak", , "kkocak@nyu.edu", role = c("aut"))
     person("Asya", "Magazinnik", , "asyam@mit.edu", role = c("aut"))
     person("Anton", "Strezhnev", , "strezhnev@wisc.edu", role = c("aut", "cre"))
-Description: This package implements the estimators and statistical tests described in Abramson, Scott F., Korhan Kocak, Asya Magazinnik, and Anton Strezhnev. "Detecting Preference Cycles in Forced-Choice Conjoint Experiments." (2023).
+Description: This package implements the estimators and statistical tests described in Abramson, Scott F., Korhan Kocak, Asya Magazinnik, and Anton Strezhnev. "Aggregation, Interpretation, and Estimation of Preferences in Conjoint Experiments." (2026).
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
