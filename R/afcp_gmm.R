@@ -79,6 +79,9 @@ gmm_pairs <- function(wide_data, level_a, level_b){
              lapply(other_levels, function(l) c(level_b, l)))
   ind <- sapply(pairs, function(p) v1 == p[1] & v2 == p[2])
   ind <- matrix(ind, nrow = nrow(wide_data))
+  if (any(is.na(ind)) || any(rowSums(ind) != 1)){
+    stop("Error: some tasks do not map to exactly one level comparison")
+  }
   empty <- colSums(ind) == 0
   if (any(empty)){
     p <- pairs[[which(empty)[1]]]
@@ -97,8 +100,8 @@ gmm_fit_influence <- function(wide_data, level_a, level_b, vcov_type){
   L_other <- pairs$L_other
 
   # Cell-means regression: coefficients are the pairwise AFCPs
-  pair_id <- factor(max.col(pairs$ind, ties.method = "first"), levels = seq_len(ncol(pairs$ind))) # "first": the default "random" draws from the RNG
-  fit <- lm(wide_data$choose ~ pair_id - 1)
+  pair_ind <- pairs$ind * 1 # numeric: lm() treats a logical matrix as a factor
+  fit <- lm(wide_data$choose ~ pair_ind - 1)
   V <- sandwich::vcovCL(fit, cluster = as.character(wide_data$respid), type = vcov_type) # as.character: vcovCL's HC2 is wrong when the cluster is a factor with unused levels
 
   C <- matrix(0, nrow = L_other + 1, ncol = 2*L_other + 1)
