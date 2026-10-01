@@ -58,4 +58,11 @@ efficient weight matrix \eqn{W = \hat V^{-1}} does not depend on \eqn{\theta}, s
 available in closed form (equivalently, optimal minimum distance): \eqn{\hat\theta = 1'W\hat m / 1'W1} with
 standard error \eqn{(1'W1)^{-1/2}}. The J-statistic \eqn{(\hat m - \hat\theta 1)'W(\hat m - \hat\theta 1)} is
 numerically identical to the joint Wald statistic \code{wald_stat_all} from \code{\link[=afcp]{afcp()}}.
+
+Estimates are differences in means within tasks, computed from the data in \code{cjointobj}; the \code{design} and
+\code{weights} passed to \code{cjoint::amce()} are not stored in \code{cjointobj} and so are not used, and survey weights are not
+supported. The over-identifying restrictions assume \code{attribute} is randomized independently of the
+other attributes. If its randomization is restricted (e.g. some of its levels cannot appear with certain levels of
+another attribute), each pairwise AFCP averages over a different distribution of the other attributes, and direct
+and indirect preferences can differ even when preferences are transitive.
 }

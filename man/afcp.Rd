@@ -44,3 +44,11 @@ A list containing three dataframes
 This estimates the Average Feature Choice Probability (AFCP) for a given attribute and level combination
 using the output from an amce object returned by the cjoint package
 }
+\details{
+Estimates are differences in means within tasks, computed from the data in \code{cjointobj}; the \code{design} and
+\code{weights} passed to \code{cjoint::amce()} are not stored in \code{cjointobj} and so are not used, and survey weights are not
+supported. The tests of direct versus indirect preferences assume \code{attribute} is randomized independently of the
+other attributes. If its randomization is restricted (e.g. some of its levels cannot appear with certain levels of
+another attribute), each pairwise AFCP averages over a different distribution of the other attributes, and direct
+and indirect preferences can differ even when preferences are transitive.
+}

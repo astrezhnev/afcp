@@ -19,6 +19,8 @@ Imports:
     stats,
     utils
 Suggests: 
+    clubSandwich,
+    estimatr,
     knitr,
     rmarkdown,
     testthat (>= 3.0.0)

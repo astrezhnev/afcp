@@ -17,6 +17,13 @@
 #' standard error \eqn{(1'W1)^{-1/2}}. The J-statistic \eqn{(\hat m - \hat\theta 1)'W(\hat m - \hat\theta 1)} is
 #' numerically identical to the joint Wald statistic `wald_stat_all` from [afcp()].
 #'
+#' Estimates are differences in means within tasks, computed from the data in `cjointobj`; the `design` and
+#' `weights` passed to `cjoint::amce()` are not stored in `cjointobj` and so are not used, and survey weights are not
+#' supported. The over-identifying restrictions assume `attribute` is randomized independently of the
+#' other attributes. If its randomization is restricted (e.g. some of its levels cannot appear with certain levels of
+#' another attribute), each pairwise AFCP averages over a different distribution of the other attributes, and direct
+#' and indirect preferences can differ even when preferences are transitive.
+#'
 #' @importFrom stats pnorm pchisq qnorm lm coef
 #'
 #' @inheritParams afcp

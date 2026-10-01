@@ -12,7 +12,8 @@ spec_curve(
   level_a,
   level_b,
   ci = 0.95,
-  vcov_type = "HC2"
+  vcov_type = "HC2",
+  weights = NULL
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ spec_curve(
 \item{ci}{Numeric between 0 and 1 denoting the size of the confidence interval to report for each estimate}
 
 \item{vcov_type}{Character passed to the \code{type} argument of \code{sandwich::vcovCL()} for the cluster-robust (by respondent) variance. The default \code{"HC2"} is the CR2 (Bell-McCaffrey) estimator, as in \code{estimatr::lm_robust()}; \code{"HC1"} matches the standard errors from \code{cjoint::amce()}.}
+
+\item{weights}{Character denoting a column of non-negative weights in the dataset from \code{cjointobj}, or \code{NULL} (the default) for no weights. This is not taken from \code{cjointobj}, so it must be supplied even if weights were passed to \code{cjoint::amce()}. With weights, the \code{"HC2"} adjustment treats them as inverse-variance weights (as \code{clubSandwich::vcovCR(..., inverse_var = TRUE)} does), so it can differ slightly from \code{estimatr::lm_robust()}, which does not.}
 }
 \value{
 A dataframe of class \code{spec_curve} sorted by the estimate, with columns
@@ -39,7 +42,7 @@ A dataframe of class \code{spec_curve} sorted by the estimate, with columns
 \item \code{n_held_out} - The number of held-out levels
 \item \code{type} - "AMCE" (no levels held out), "AFCP" (all other levels held out) or "Held-out"
 \item \code{estimate}, \code{se}, \code{pval}, \code{conf_low}, \code{conf_high}, \code{conf_level} - The AMCE estimate and inference
-\item \code{rank} - Position of the estimate in the sorted curve
+\item \code{rank} - Position of the estimate in the sorted curve (\code{NA} for held-out sets that are not estimable)
 }
 }
 \description{
@@ -49,5 +52,19 @@ to hold out. For each combination, every task (not just every profile) containin
 and the AMCE of \code{level_a} relative to \code{level_b} is re-estimated by regressing the choice outcome on the attribute,
 with cluster-robust standard errors clustered on respondent. Holding out no levels gives the AMCE; holding out
 all other levels gives an estimate that only uses direct comparisons of \code{level_a} and \code{level_b}
-(whose estimand equals the centered AFCP under complete randomization).
+(whose estimand equals the centered AFCP when \code{attribute} is independently randomized).
+}
+\details{
+The estimates come from a regression of the choice outcome on \code{attribute} alone; the \code{design} and \code{weights}
+passed to \code{cjoint::amce()} are not stored in \code{cjointobj} and so are not used. This is a valid estimator of the
+AMCE when \code{attribute} is randomized independently of the other attributes and from the same distribution in
+both profiles of a task (its levels need not be equally likely). It does not account for randomization
+restrictions involving \code{attribute}. Because the other attributes in the \code{amce()} formula are left out, the
+AMCE estimate will generally differ in finite samples from the one reported by \code{cjoint::amce()}, though both
+are unbiased under independent randomization. Survey weights can be supplied through \code{weights}.
+
+A held-out set is not estimable if, after dropping its tasks, \code{level_a} or \code{level_b} no longer appears
+against a different level in any task (for example, when every task containing \code{level_b} also contains a
+held-out level, or when \code{level_a} and \code{level_b} never appear in the same task). Those rows are returned with
+\code{NA} estimates, with a warning.
 }
