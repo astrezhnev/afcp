@@ -59,8 +59,7 @@ spec_curve <- function(cjointobj, respondent.id, task.id, attribute, level_a, le
   attr_values <- data[[setup$attribute]]
   respondent <- data[[setup$respondent.id]]
   w <- spec_curve_weights(data, weights)
-  # Integer codes rather than the raw ids, so that e.g. respondent "1_2" task "3" can't match respondent "1" task "2_3"
-  task_key <- paste(match(respondent, unique(respondent)), match(data[[setup$task.id]], unique(data[[setup$task.id]])))
+  task_key <- task_keys(respondent, data[[setup$task.id]])
 
   # Whether each task has level_a (level_b) against some different level - needed for an estimate to be defined
   vs_other <- function(l){

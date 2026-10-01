@@ -73,37 +73,13 @@ afcp_gmm <- function(cjointobj, respondent.id, task.id, profile.id, attribute, b
 }
 
 
-#' Pair indicators for the wide data: a-b, then a-c and b-c for each other level c (sorted)
-#'
-#' make.wide.data() orients tasks so level_a is first, then level_b; other levels c are second.
-#' @noRd
-gmm_pairs <- function(wide_data, level_a, level_b){
-  v1 <- as.character(wide_data$val1)
-  v2 <- as.character(wide_data$val2)
-  other_levels <- sort(setdiff(unique(c(v1, v2)), c(level_a, level_b)))
-  pairs <- c(list(c(level_a, level_b)),
-             lapply(other_levels, function(l) c(level_a, l)),
-             lapply(other_levels, function(l) c(level_b, l)))
-  ind <- sapply(pairs, function(p) v1 == p[1] & v2 == p[2])
-  ind <- matrix(ind, nrow = nrow(wide_data))
-  if (any(is.na(ind)) || any(rowSums(ind) != 1)){
-    stop("Error: some tasks do not map to exactly one level comparison")
-  }
-  empty <- colSums(ind) == 0
-  if (any(empty)){
-    p <- pairs[[which(empty)[1]]]
-    stop(paste("Error: no tasks compare ", p[1], " and ", p[2], sep=""))
-  }
-  list(ind = ind, L_other = length(other_levels))
-}
-
 #' Efficient GMM with influence-function moments (optimal minimum distance)
 #'
 #' Targets: m_0 = AFCP(a,b); m_k = 1/2 + AFCP(a,c_k) - AFCP(b,c_k). With V the cluster-robust covariance of the
 #' pairwise means (as in afcp()), W = (C V C')^{-1}.
 #' @noRd
 gmm_fit_influence <- function(wide_data, level_a, level_b, vcov_type){
-  pairs <- gmm_pairs(wide_data, level_a, level_b)
+  pairs <- level_pairs(wide_data, level_a, level_b)
   L_other <- pairs$L_other
 
   # Cell-means regression: coefficients are the pairwise AFCPs

@@ -53,6 +53,9 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
     wide_data <- make.wide.data(indata=data, attr_var = attribute, level_a = level, level_b = baseline,
                                 respondentID = respondent.id, choice = choice.outcome, qid = task.id, option = profile.id)
 
+    # Check that a-b and every a-c and b-c comparison has tasks; otherwise the coefficients below don't line up
+    pairs <- level_pairs(wide_data, level, baseline)
+
     # Get estimates
     estimates <- lm(choose ~ treatment, data=wide_data) # respid = respondent ID from wide_data
 
@@ -85,13 +88,13 @@ afcp <- function(cjointobj, respondent.id, task.id, profile.id, attribute, basel
     # \beta_0 - \beta_1 + \beta_2 = 1/2
 
     # Number of *other* levels
-    L_other <- (length(estimates$coefficients) - 1)/2 #
+    L_other <- pairs$L_other
 
     # If there's more than two levels
     if (L_other > 0){
 
-      # Get names of the other levels sorted alphabetically
-      other_levels <- sort(attr_use[attr_use != level])
+      # Names of the other levels, sorted in the same order as the coefficients
+      other_levels <- pairs$other_levels
 
       #####
       # For each other level, test for direct vs. indirect equivalence.
@@ -213,9 +216,6 @@ make.wide.data <- function(indata, attr_var, level_a, level_b, respondentID, cho
     stop("Error: Conjoint contains tasks with more than two profiles")
   }
 
-  # Rearrange
-  sub <- sub %>% arrange(respondentID, qid, option)
-
   # Split
   sub1 <- sub[sub[[option]]==1,]
   sub2 <- sub[sub[[option]]==2,]
@@ -226,14 +226,11 @@ make.wide.data <- function(indata, attr_var, level_a, level_b, respondentID, cho
   sub_merge <- merge(sub1, sub2, by = c("respid", "qid"))
 
   # Restructure the data - drop if not contain either level_a or level_b
-  sub_merge <- sub_merge %>% filter(val1 %in% c(level_a, level_b) | val2 %in% c(level_a, level_b))
+  sub_merge <- sub_merge %>% filter(.data$val1 %in% c(level_a, level_b) | .data$val2 %in% c(level_a, level_b))
 
   # Drop duplicated tasks
-  sub_merge <- sub_merge %>% filter(val1 != val2)
+  sub_merge <- sub_merge %>% filter(.data$val1 != .data$val2)
 
-  # Get all of the possible levels of the amce var ordered alphabetically
-  level_list = sort(unique(c(sub_merge$val1, sub_merge$val2)))
-  
   # Flip so that we get no AFCPs that are duplicated
   sub_final <- sub_merge
 
@@ -258,20 +255,19 @@ make.wide.data <- function(indata, attr_var, level_a, level_b, respondentID, cho
   # Make a joint treatment
   sub_final$treatment <- paste(sub_final$val1, sub_final$val2, sep=", ")
 
-  # what are the treatment conditions?
-  third_treatment_conditions <- unique(sub_final$treatment)
-  third_treatment_conditions <- third_treatment_conditions[third_treatment_conditions != paste(level_a, level_b, sep=", ")]
-  third_treatment_conditions <- third_treatment_conditions[order(third_treatment_conditions)]
-
-  # Reorder the joint treatment so A v. B is first, then all A third-comparisons and all B third-comparisons
+  # Reorder the joint treatment so A v. B is first, then all A third-comparisons and all B third-comparisons, each
+  # sorted by the third level. Exact matches on val1 (the flips above put level_a, then level_b, first) rather than
+  # grepl(), which also matched levels containing level_a or level_b as a substring (e.g. "5" in "50")
+  other_a <- sort(unique(sub_final$val2[sub_final$val1 == level_a & sub_final$val2 != level_b]))
+  other_b <- sort(unique(sub_final$val2[sub_final$val1 == level_b]))
   level_order <- c(paste(level_a, level_b, sep=", "),
-                   third_treatment_conditions[grepl(level_a, third_treatment_conditions)],
-                   third_treatment_conditions[grepl(level_b, third_treatment_conditions)])
+                   if (length(other_a)) paste(level_a, other_a, sep=", "),
+                   if (length(other_b)) paste(level_b, other_b, sep=", "))
 
   # Force into a factor
   sub_final$treatment <- factor(sub_final$treatment, levels = level_order)
 
   # Return it
-  return(sub_final %>% dplyr:::select(respid, qid, choose = choose1, treatment, val1, val2))
+  return(dplyr::select(sub_final, "respid", "qid", choose = "choose1", "treatment", "val1", "val2"))
 
 }
